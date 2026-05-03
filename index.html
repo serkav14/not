@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Vardiya Notu</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .kart {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 24px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      text-align: center;
+    }
+    .logo { font-size: 48px; margin-bottom: 12px; }
+    .baslik {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 6px;
+    }
+    .alt-baslik {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 24px;
+    }
+    .not-kutusu {
+      background: #f7f9fc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    .not-etiket {
+      font-size: 11px;
+      font-weight: 700;
+      color: #888;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .not-metin {
+      font-size: 17px;
+      color: #1a1a2e;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+    .kisi-bilgi {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+    .indir-btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      margin-bottom: 12px;
+      transition: opacity 0.2s;
+    }
+    .indir-btn:hover { opacity: 0.9; }
+    .indir-btn .btn-alt {
+      font-size: 12px;
+      font-weight: 400;
+      opacity: 0.85;
+      display: block;
+      margin-top: 2px;
+    }
+    .acik-btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      margin-bottom: 16px;
+      transition: background 0.2s;
+    }
+    .acik-btn:hover { background: #e2e8f0; }
+    .yükleniyor { color: #888; font-size: 15px; padding: 20px 0; }
+    .hata { color: #e53e3e; font-size: 15px; padding: 20px 0; }
+    .footer {
+      font-size: 12px;
+      color: #bbb;
+      margin-top: 16px;
+    }
+    .parca-bilgi {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #9a3412;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+<div class="kart">
+  <div class="logo">📋</div>
+  <div class="baslik">Vardiya Notunuz Var!</div>
+  <div class="alt-baslik" id="alt-baslik">Yükleniyor...</div>
+
+  <div id="icerik">
+    <div class="yükleniyor">⏳ Not getiriliyor...</div>
+  </div>
+
+  <div class="footer">Vardiya Uygulaması tarafından gönderildi</div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // ▼▼▼ KENDİ FIREBASE AYARLARINIZI BURAYA GİRİN ▼▼▼
+  const firebaseConfig = {
+    apiKey:            "BURAYA_API_KEY",
+    authDomain:        "BURAYA_AUTH_DOMAIN",
+    projectId:         "BURAYA_PROJECT_ID",
+    storageBucket:     "BURAYA_STORAGE_BUCKET",
+    messagingSenderId: "BURAYA_MESSAGING_SENDER_ID",
+    appId:             "BURAYA_APP_ID"
+  };
+  // ▲▲▲ KENDİ FIREBASE AYARLARINIZI BURAYA GİRİN ▲▲▲
+
+  const app  = initializeApp(firebaseConfig);
+  const db   = getFirestore(app);
+
+  const PLAY_STORE_LINK = "https://play.google.com/store/apps/details?id=com.serkan.vardiyauygulamasi";
+  const DEEP_LINK_SCHEME = "vardiyaapp://not";
+
+  // URL'den not id'sini al
+  const params = new URLSearchParams(window.location.search);
+  const notId  = params.get("id");
+
+  const icerikDiv   = document.getElementById("icerik");
+  const altBaslikEl = document.getElementById("alt-baslik");
+
+  if (!notId) {
+    altBaslikEl.textContent = "";
+    icerikDiv.innerHTML = '<div class="hata">❌ Geçersiz link. Lütfen size gönderilen linki kontrol edin.</div>';
+  } else {
+    yukle(notId);
+  }
+
+  async function yukle(id) {
+    try {
+      const docRef  = doc(db, "notlar", id);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        altBaslikEl.textContent = "";
+        icerikDiv.innerHTML = '<div class="hata">❌ Not bulunamadı veya silinmiş olabilir.</div>';
+        return;
+      }
+
+      const veri = docSnap.data();
+      const isim = veri.isim || "Personel";
+      const not  = veri.notMetni || "";
+      const zaman = veri.zaman
+        ? new Date(veri.zaman).toLocaleDateString("tr-TR", { day:"numeric", month:"long", year:"numeric" })
+        : "";
+
+      altBaslikEl.textContent = `${isim} için not`;
+
+      // Notu okundu olarak işaretle
+      try { await updateDoc(docRef, { okundu: true }); } catch(_) {}
+
+      // Uygulamada aç / indir butonları
+      const deepLink = `${DEEP_LINK_SCHEME}?id=${encodeURIComponent(id)}`;
+
+      icerikDiv.innerHTML = `
+        ${zaman ? `<div class="kisi-bilgi">📅 ${zaman}</div>` : ""}
+        <div class="kisi-bilgi">👤 ${isim}</div>
+        <div class="not-kutusu">
+          <div class="not-etiket">Notunuz</div>
+          <div class="not-metin">${escHtml(not)}</div>
+        </div>
+        <div class="parca-bilgi">
+          💡 Tüm vardiya bilgilerinize ve notlarınıza ulaşmak için uygulamayı indirin.
+        </div>
+        <a class="indir-btn" href="${PLAY_STORE_LINK}" id="indir-btn">
+          📲 Uygulamayı İndir
+          <span class="btn-alt">Google Play Store'dan ücretsiz indir</span>
+        </a>
+        <a class="acik-btn" href="${deepLink}" id="ac-btn">
+          Uygulamayı Aç (Yüklüyse)
+        </a>
+      `;
+
+      // Uygulama yüklüyse deep link ile aç, değilse Play Store'a yönlendir
+      const indir = document.getElementById("indir-btn");
+      const ac    = document.getElementById("ac-btn");
+
+      ac.addEventListener("click", function(e) {
+        e.preventDefault();
+        const baslangic = Date.now();
+        window.location.href = deepLink;
+        // 1.5 saniye sonra hâlâ buradaysak uygulama yüklü değil demektir
+        setTimeout(function() {
+          if (Date.now() - baslangic < 2500) {
+            window.location.href = PLAY_STORE_LINK;
+          }
+        }, 1500);
+      });
+
+    } catch (err) {
+      altBaslikEl.textContent = "";
+      icerikDiv.innerHTML = `<div class="hata">❌ Bağlantı hatası: ${err.message}</div>`;
+    }
+  }
+
+  function escHtml(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\n/g, "<br>");
+  }
+</script>
+</body>
+</html>
