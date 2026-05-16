@@ -1,0 +1,43 @@
+name: Bildirim Gonder
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  bildirim:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Node.js Kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bagimliliklari Yukle
+        run: npm install firebase-admin
+
+      - name: Bildirimleri Gonder
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          node << 'SCRIPT'
+          const admin = require('firebase-admin');
+          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+          const projectId = process.env.FIREBASE_PROJECT_ID;
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            projectId: projectId
+          });
+          const db = admin.firestore();
+          const messaging = admin.messaging();
+          async function bildirimGonder() {
+            const wsSnap = await db.collection('workspaces').get();
+            for (const wsDoc of wsSnap.docs) {
+              const wsId = wsDoc.id;
+              const bildirimSnap = await db
+                .collection('workspaces').doc(wsId)
+                .collection('bildirimler')
+                .where('okundu', '==', false)
+                .where('gonderildi', '==', false)
