@@ -4,6 +4,10 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Vardiya Notu</title>
+ 
+  <!-- OneSignal Web Push SDK -->
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+ 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -102,7 +106,7 @@
       transition: background 0.2s;
     }
     .acik-btn:hover { background: #e2e8f0; }
-    .yükleniyor { color: #888; font-size: 15px; padding: 20px 0; }
+    .yukleniyor { color: #888; font-size: 15px; padding: 20px 0; }
     .hata { color: #e53e3e; font-size: 15px; padding: 20px 0; }
     .footer {
       font-size: 12px;
@@ -119,6 +123,17 @@
       margin-bottom: 16px;
       text-align: left;
     }
+    .bildirim-banner {
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #166534;
+      margin-bottom: 16px;
+      text-align: left;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -126,76 +141,114 @@
   <div class="logo">📋</div>
   <div class="baslik">Vardiya Notunuz Var!</div>
   <div class="alt-baslik" id="alt-baslik">Yükleniyor...</div>
-
-  <div id="icerik">
-    <div class="yükleniyor">⏳ Not getiriliyor...</div>
+ 
+  <div id="bildirim-banner" class="bildirim-banner">
+    🔔 Bundan sonra yeni notlarınız otomatik olarak bildirim olarak gelecek.
   </div>
-
+ 
+  <div id="icerik">
+    <div class="yukleniyor">⏳ Not getiriliyor...</div>
+  </div>
+ 
   <div class="footer">Vardiya Uygulaması tarafından gönderildi</div>
 </div>
-
-<!-- Firebase SDK -->
+ 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-  // ▼▼▼ KENDİ FIREBASE AYARLARINIZI BURAYA GİRİN ▼▼▼
+  import { getFirestore, doc, getDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+ 
   const firebaseConfig = {
-    apiKey:            "BURAYA_API_KEY",
-    authDomain:        "BURAYA_AUTH_DOMAIN",
-    projectId:         "BURAYA_PROJECT_ID",
-    storageBucket:     "BURAYA_STORAGE_BUCKET",
-    messagingSenderId: "BURAYA_MESSAGING_SENDER_ID",
-    appId:             "BURAYA_APP_ID"
+    apiKey:            "AIzaSyDQwc20NmgKvzhD5uJlpHXHyVhbbQgj8gU",
+    authDomain:        "shiftup-748fd.firebaseapp.com",
+    projectId:         "shiftup-748fd",
+    storageBucket:     "shiftup-748fd.firebasestorage.app",
+    messagingSenderId: "954147416371",
+    appId:             "1:954147416371:web:572cc73de73fa10105f646"
   };
-  // ▲▲▲ KENDİ FIREBASE AYARLARINIZI BURAYA GİRİN ▲▲▲
-
-  const app  = initializeApp(firebaseConfig);
-  const db   = getFirestore(app);
-
-  const PLAY_STORE_LINK = "https://play.google.com/store/apps/details?id=com.serkan.vardiyauygulamasi";
-  const DEEP_LINK_SCHEME = "vardiyaapp://not";
-
-  // URL'den not id'sini al
-  const params = new URLSearchParams(window.location.search);
-  const notId  = params.get("id");
-
-  const icerikDiv   = document.getElementById("icerik");
-  const altBaslikEl = document.getElementById("alt-baslik");
-
+ 
+  const ONESIGNAL_APP_ID   = "1e103bc6-f1ab-4202-babe-4c3aba5660cb";
+  const PLAY_STORE_LINK    = "https://play.google.com/store/apps/details?id=com.serkan.vardiyauygulamasi";
+  const DEEP_LINK_SCHEME   = "vardiyaapp://not";
+ 
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+ 
+  const params      = new URLSearchParams(window.location.search);
+  const notId       = params.get("id");
+  const telefonParam = params.get("tel"); // opsiyonel: ?tel=905364604827
+ 
+  const icerikDiv    = document.getElementById("icerik");
+  const altBaslikEl  = document.getElementById("alt-baslik");
+  const bildirimBanner = document.getElementById("bildirim-banner");
+ 
+  // ── OneSignal başlat ───────────────────────────────────────
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: ONESIGNAL_APP_ID,
+      notifyButton: { enable: false },
+      promptOptions: {
+        slidedown: {
+          prompts: [{
+            type: "push",
+            autoPrompt: false,  // Kendimiz tetikleyeceğiz
+            text: {
+              actionMessage: "Yeni vardiya notlarınız geldiğinde bildirim almak ister misiniz?",
+              acceptButton:  "Evet, Bildir",
+              cancelButton:  "Hayır"
+            }
+          }]
+        }
+      }
+    });
+  });
+ 
+  // ── Ana akış ──────────────────────────────────────────────
   if (!notId) {
     altBaslikEl.textContent = "";
     icerikDiv.innerHTML = '<div class="hata">❌ Geçersiz link. Lütfen size gönderilen linki kontrol edin.</div>';
   } else {
     yukle(notId);
   }
-
+ 
   async function yukle(id) {
     try {
-      const docRef  = doc(db, "notlar", id);
+      // Hangi collection'dan çekeceğimizi belirle
+      // Eğer URL'de ?tel= varsa personel_notlar/{tel}/notlar/{id}
+      // Yoksa eski uyumluluk için notlar/{id}
+      let docRef;
+      if (telefonParam) {
+        docRef = doc(db, "personel_notlar", telefonParam, "notlar", id);
+      } else {
+        docRef = doc(db, "notlar", id);
+      }
+ 
       const docSnap = await getDoc(docRef);
-
+ 
       if (!docSnap.exists()) {
         altBaslikEl.textContent = "";
         icerikDiv.innerHTML = '<div class="hata">❌ Not bulunamadı veya silinmiş olabilir.</div>';
         return;
       }
-
-      const veri = docSnap.data();
-      const isim = veri.isim || "Personel";
-      const not  = veri.notMetni || "";
-      const zaman = veri.zaman
-        ? new Date(veri.zaman).toLocaleDateString("tr-TR", { day:"numeric", month:"long", year:"numeric" })
+ 
+      const veri  = docSnap.data();
+      const isim  = veri.isim || veri.baslik || "Personel";
+      const not   = veri.notMetni || veri.mesaj || "";
+      const zaman = veri.zaman || veri.tarih
+        ? (() => {
+            const ts = veri.zaman || veri.tarih;
+            const d  = ts?.toDate ? ts.toDate() : new Date(ts);
+            return d.toLocaleDateString("tr-TR", { day:"numeric", month:"long", year:"numeric" });
+          })()
         : "";
-
+ 
       altBaslikEl.textContent = `${isim} için not`;
-
-      // Notu okundu olarak işaretle
+ 
+      // Okundu işaretle
       try { await updateDoc(docRef, { okundu: true }); } catch(_) {}
-
-      // Uygulamada aç / indir butonları
+ 
+      // İçeriği göster
       const deepLink = `${DEEP_LINK_SCHEME}?id=${encodeURIComponent(id)}`;
-
       icerikDiv.innerHTML = `
         ${zaman ? `<div class="kisi-bilgi">📅 ${zaman}</div>` : ""}
         <div class="kisi-bilgi">👤 ${isim}</div>
@@ -204,7 +257,7 @@
           <div class="not-metin">${escHtml(not)}</div>
         </div>
         <div class="parca-bilgi">
-          💡 Tüm vardiya bilgilerinize ve notlarınıza ulaşmak için uygulamayı indirin.
+          💡 Tüm vardiya bilgilerinize ulaşmak için uygulamayı indirin.
         </div>
         <a class="indir-btn" href="${PLAY_STORE_LINK}" id="indir-btn">
           📲 Uygulamayı İndir
@@ -214,31 +267,60 @@
           Uygulamayı Aç (Yüklüyse)
         </a>
       `;
-
-      // Uygulama yüklüyse deep link ile aç, değilse Play Store'a yönlendir
-      const indir = document.getElementById("indir-btn");
-      const ac    = document.getElementById("ac-btn");
-
-      ac.addEventListener("click", function(e) {
+ 
+      // Deep link mantığı
+      document.getElementById("ac-btn").addEventListener("click", function(e) {
         e.preventDefault();
         const baslangic = Date.now();
         window.location.href = deepLink;
-        // 1.5 saniye sonra hâlâ buradaysak uygulama yüklü değil demektir
         setTimeout(function() {
-          if (Date.now() - baslangic < 2500) {
-            window.location.href = PLAY_STORE_LINK;
-          }
+          if (Date.now() - baslangic < 2500) window.location.href = PLAY_STORE_LINK;
         }, 1500);
       });
-
+ 
+      // ── OneSignal izin iste + token kaydet ────────────────
+      // Not yüklendikten sonra arka planda sessizce çalışır
+      setTimeout(() => oneSignalKaydet(telefonParam || isim), 1500);
+ 
     } catch (err) {
       altBaslikEl.textContent = "";
       icerikDiv.innerHTML = `<div class="hata">❌ Bağlantı hatası: ${err.message}</div>`;
     }
   }
-
+ 
+  async function oneSignalKaydet(telefon) {
+    try {
+      OneSignalDeferred.push(async function(OneSignal) {
+        // Mevcut izin durumunu kontrol et
+        const izinVerildi = await OneSignal.Notifications.permission;
+ 
+        if (!izinVerildi) {
+          // İzin iste (slidedown prompt)
+          await OneSignal.Slidedown.promptPush();
+        }
+ 
+        // Player ID al
+        const playerId = await OneSignal.User.PushSubscription.id;
+        if (!playerId || !telefon) return;
+ 
+        // Firestore'a kaydet — personel_notlar/{telefon} belgesine ekle
+        const personelRef = doc(db, "personel_notlar", String(telefon));
+        await setDoc(personelRef, {
+          oneSignalPlayerId: playerId,
+          sonGuncelleme: new Date().toISOString()
+        }, { merge: true });
+ 
+        // Banner göster
+        bildirimBanner.style.display = "block";
+      });
+    } catch(e) {
+      // Sessizce hata yut — kullanıcıyı rahatsız etme
+      console.log("OneSignal kayıt hatası:", e);
+    }
+  }
+ 
   function escHtml(str) {
-    return str
+    return (str || "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
